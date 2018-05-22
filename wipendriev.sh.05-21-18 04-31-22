@@ -1,0 +1,35 @@
+#!/bin/bash
+
+############################################
+### BASH SCRIPT TO SECURELY ERASE DRIVES ###
+### Nick Schmidt, 21 May 2018            ###
+############################################
+
+#Set disk variables from CLI
+DISK_TO_ERASE=$1
+DISK_SERIAL=$(smartctl -i $DISK_TO_ERASE | grep Serial | cut -f10 -d' ')
+DISK_ERASURE_LOG_FILENAME=$DISK_SERIAL-wipelog-$(date +"%Y%m%d%T")
+#debugs
+#echo $DISK_TO_ERASE
+#echo $DISK_ERASURE_LOG_FILENAME
+
+
+#DO ACTUAL THINGS
+echo "*** COLLECTING EVIDENTIARY INFO AND LOGGING ***" | tee $DISK_ERASURE_LOG_FILENAME.log
+echo "*** Collecting Pre-sanitization HEX HEAD  ***" | tee -a $DISK_ERASURE_LOG_FILENAME.log
+cat $DISK_TO_ERASE | hex | head -n50 | tee -a $DISK_ERASURE_LOG_FILENAME.log
+echo "*** EXECUTING FIRST PASS WITH CRYPTO SANITIZATION ***" | tee -a $DISK_ERASURE_LOG_FILENAME.log
+sg_sanitize -C $DISK_TO_ERASE | tee -a $DISK_ERASURE_LOG_FILENAME.log
+echo "*** Collecting Post-sanitization HEX HEAD  ***" | tee -a $DISK_ERASURE_LOG_FILENAME.log
+cat $DISK_TO_ERASE | hex | head -n50 | tee -a $DISK_ERASURE_LOG_FILENAME.log
+echo "*** WRITING RANDOM BITS ***" | tee -a $DISK_ERASURE_LOG_FILENAME.log
+dd if=/dev/urandom of=$DISK_TO_ERASE bs=1M count=40
+echo "*** Collecting Post-randomization HEX HEAD  ***" | tee -a $DISK_ERASURE_LOG_FILENAME.log
+cat $DISK_TO_ERASE | hex | head -n50 | tee -a $DISK_ERASURE_LOG_FILENAME.log
+echo "*** EXECUTING SECOND PASS WITH CRYPTO SANITIZATION ***" | tee -a $DISK_ERASURE_LOG_FILENAME.log
+sg_sanitize -C $DISK_TO_ERASE | tee -a $DISK_ERASURE_LOG_FILENAME.log
+echo "*** Collecting SECOND Post-sanitization HEX HEAD  ***" | tee -a $DISK_ERASURE_LOG_FILENAME.log
+cat $DISK_TO_ERASE | hex | head -n50 | tee -a $DISK_ERASURE_LOG_FILENAME.log
+echo "Checksumming file!" 
+sha256sum $DISK_ERASURE_LOG_FILENAME.log | tee $DISK_ERASURE_LOG_FILENAME.sha256sum
+echo "*** DISK SANITIZATION COMPLETE ***"
